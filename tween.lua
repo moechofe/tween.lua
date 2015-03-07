@@ -340,18 +340,39 @@ function Tween:set(clock)
 end
 
 function Tween:reset()
+  self.done = false
   return self:set(0)
 end
 
 function Tween:update(dt)
   assert(type(dt) == 'number', "dt must be a number")
-  return self:set(self.clock + dt)
+  local done = self:set(self.clock + dt)
+  if done and self.cb and not self.done then
+      self.done = true
+      self.cb(self, self.args)
+  end
+  return done
 end
 
+-- Sequence methods
+
+local Seq = {}
+local Seq_mt = {__index = Seq}
+
+function Seq:update(dt)
+  assert(type(dt) == 'number', "dt must be a number")
+  if self.index and self.tweens[self.index]:update(dt) then
+    if self.index < #self.tweens then
+        self.index = self.index + 1
+    else
+        self.index = false
+    end
+  end
+end
 
 -- Public interface
 
-function tween.new(duration, subject, target, easing)
+function tween.new(duration, subject, target, easing, cb, ...)
   easing = getEasingFunction(easing)
   checkNewParams(duration, subject, target, easing)
   return setmetatable({
@@ -359,11 +380,26 @@ function tween.new(duration, subject, target, easing)
     subject   = subject,
     target    = target,
     easing    = easing,
-
+    cb        = cb,
+    done      = false,
+    args      = {...},
     initial   = copyTables({},target,subject),
     clock     = 0
   }, Tween_mt)
 end
 
-return tween
+function tween.delay(duration, cb, ...)
+  local dummy = {}
+  return tween.new(duration, dummy, dummy, linear, cb, ...)
+end
 
+function tween.sequence(...)
+  -- TODO: Do I need to check the Tween object?
+  -- TODO: Do I need a callback for the whole sequence?
+  return setmetatable({
+    tweens  = {...},
+    index   = 1
+  }, Seq_mt)
+end
+
+Test = tween
